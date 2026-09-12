@@ -14,6 +14,7 @@ class todo(Base):
     fechaactual = Column(Date)
     fechaultima = Column(Date)
     estatus = Column(Integer)
+    licencia = Column(String)
 
 Base.metadata.create_all(engine)
 
