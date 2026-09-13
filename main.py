@@ -23,6 +23,7 @@ class DatosLicencia(BaseModel):
     fechaultima: date | None = None
     licencia: str | None = None
     tipoempresa: str | None = None
+    estaciones: int | None = None
 
 class DatosActualizar(BaseModel):
     rif: str
@@ -126,7 +127,8 @@ async def buscar_licencia(
             "razonsocial": licencia.razonsocial,
             "licencia": licencia.licencia,
             "fecha Ultima": licencia.fechaultima,
-            "tipo de Empresa": licencia.tipoempresa
+            "tipo de Empresa": licencia.tipoempresa,
+            "Nro Estaciones" : licencia.estaciones,
         }
 
     except HTTPException:
@@ -158,6 +160,7 @@ async def guardar_o_actualizar_licencia(
             licencia.fechaultima = datos.fechaultima
             licencia.tipoempresa = datos.tipoempresa
             licencia.mac = datos.mac
+            licencia.estaciones = datos.estaciones
 
 
             db.commit()
@@ -179,9 +182,10 @@ async def guardar_o_actualizar_licencia(
                 estatus = datos.estatus,
                 fechaultima = datos.fechaultima or date.today(),
                 licencia = datos.licencia,
-                tipoempresa = datos.tipoempresa
-
+                tipoempresa = datos.tipoempresa,
+                estaciones = datos.estaciones
             )
+
             db.add(nueva_licencia)
             db.commit()
             db.refresh(nueva_licencia)
