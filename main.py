@@ -123,7 +123,7 @@ async def buscar_licencia(
         return {
             "status": licencia.estatus, 
             "rif": licencia.rif,
-            "razonsocial": licencia.tipoempresa,
+            "razonsocial": licencia.razonsocial,
             "licencia": licencia.licencia,
             "fecha Ultima": licencia.fechaultima,
             "tipo de Empresa": licencia.tipoempresa
