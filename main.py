@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, status, Response
+from fastapi import FastAPI, Depends, HTTPException, status, Response, Header
 from pydantic import BaseModel
 from db import session, get_db
 
@@ -63,10 +63,7 @@ async def health_check(response: Response, db: Session = Depends(get_db)):
 
 
 
-
-
-
-@app.post('/consulta')
+@app.post('/consultaBody')
 async def buscar_licencia(
     datos: Datos, 
     db: Session = Depends(get_db)
@@ -99,6 +96,41 @@ async def buscar_licencia(
         )
 
 
+
+
+@app.get('/consulta')
+async def buscar_licencia(
+    rif: str,  # <--- Sin Header(...), ahora se lee de la URL (?rif=...)
+    mac: str,  # <--- Sin Header(...), ahora se lee de la URL (&mac=...)
+    db: Session = Depends(get_db)
+):
+    try:
+        licencia = db.query(todo).filter(
+            todo.rif == rif,
+            todo.mac == mac
+        ).first()
+
+        if not licencia:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Licencia no registrada o inactiva"
+            )
+
+        return {
+            "status": licencia.estatus, 
+            "rif": licencia.rif, 
+            "mac": licencia.mac,
+            "fecha servidor": licencia.fechaactual,
+            "fecha Ultima": licencia.fechaultima
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error en el servidor: {str(e)}"
+        )
 
 
 
