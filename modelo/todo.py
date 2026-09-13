@@ -10,11 +10,12 @@ class todo(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     rif = Column(String)
+    razonsocial = Column(String)
     mac = Column(String)
-    fechaactual = Column(Date)
     fechaultima = Column(Date)
     estatus = Column(Integer)
     licencia = Column(String)
+    tipoempresa = Column(Integer)
 
 Base.metadata.create_all(engine)
 
