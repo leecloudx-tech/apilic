@@ -1,11 +1,12 @@
 from fastapi import FastAPI, Depends, HTTPException, status, Response, Header
 from pydantic import BaseModel
 from db import session, get_db
-
+import calendar
 from modelo.todo import todo
 from sqlalchemy.orm import Session  # <--- Importante para Session
 from sqlalchemy import text
 from datetime import date, datetime
+from Funciones import ErroresVarios
 
 
 
@@ -24,6 +25,7 @@ class DatosLicencia(BaseModel):
     licencia: str | None = None
     tipoempresa: str | None = None
     estaciones: int | None = None
+    fechapago: date | None = None
 
 class DatosActualizar(BaseModel):
     rif: str
@@ -33,10 +35,6 @@ class DatosActualizar(BaseModel):
 app = FastAPI()
 
 
-
-#@app.post('/')
-#async def read_root(datos: Datos):
-#    return {'Datos':datos,'Rif': datos.rif,'mac':datos.mac}
 
 
 
@@ -60,9 +58,6 @@ async def health_check(response: Response, db: Session = Depends(get_db)):
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
         health_status["details"] = f"Error de conexión a la BD: {str(e)}"
         return health_status
-
-
-
 
 
 
@@ -111,25 +106,50 @@ async def buscar_licencia(
     db: Session = Depends(get_db)
 ):
     try:
-        if tip == 1: # BUSCA POR RIF
-            licencia = db.query(todo).filter(
-                todo.rif == rif
-            ).first()
+        match tip:
+            case 1: #BUSCA POR RIF
+                licencia = db.query(todo).filter(
+                    todo.rif == rif
+                ).first()
 
-        elif tip == 2: #BUSCA POR RIF Y LICENCIA
-           licencia = db.query(todo).filter(
-                todo.rif == rif,
-                todo.licencia == lic
-           ).first()
+            case 2: #BUSCA POR RIF Y LICENCIA
+                licencia = db.query(todo).filter(
+                    todo.rif == rif,
+                    todo.licencia == lic
+                ).first()
+                estatus_calculado = VerificarStatus(licencia, db)
+
+                
+                if not estatus_calculado:
+                    ErroresVarios(404,"No se pudo comprobar el estatus de su licencia")
 
 
+            case 3: # Busca todo
+                licencias = db.query(todo).all()
+
+                resultado = []
+                for lic in licencias:
+
+                    # 3. Construir el diccionario de cada elemento
+                    resultado.append({
+                        "id": lic.id if hasattr(lic, 'id') else lic.rif,
+                        "status": estatus_calculado,
+                        "rif": lic.rif,
+                        "razonsocial": lic.razonsocial,
+                        "licencia": lic.licencia,
+                        "fechaultima": str(lic.fechaultima) if lic.fechaultima else "",
+                        "fechapago": str(lic.fechapago) if lic.fechapago else "",
+                        "tipoempresa": lic.tipoempresa,
+                        "estaciones": lic.estaciones
+                    })
+
+                return resultado
+            case _: # ERROR NO SE ENVIO NADA
+                ErroresVarios(500)
 
 
         if not licencia:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Licencia no registrada"
-            )
+            ErroresVarios(404,"No se encontro una licencia valida")
 
         return {
             "status": licencia.estatus, 
@@ -139,16 +159,14 @@ async def buscar_licencia(
             "fecha Ultima": licencia.fechaultima,
             "tipo de Empresa": licencia.tipoempresa,
             "Nro Estaciones" : licencia.estaciones,
-            "mensaje" : "OK"
+            "mensaje" : "OK",
+            "Fecha Ultimo pago" : licencia.fechapago
         }
 
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error en el servidor: {str(e)}"
-        )
+        ErroresVarios(500)
 
 
 
@@ -162,7 +180,6 @@ async def guardar_o_actualizar_licencia(
         # 1. Buscar si la licencia ya existe con el RIF
         licencia = db.query(todo).filter(
             todo.rif == datos.rif,
- #           todo.mac == datos.mac
         ).first()
 
         # 2. SI EXISTE: Actualizar los campos
@@ -172,6 +189,7 @@ async def guardar_o_actualizar_licencia(
             licencia.tipoempresa = datos.tipoempresa
             licencia.mac = datos.mac
             licencia.estaciones = datos.estaciones
+            licencia.fechapago = datos.fechapago
 
 
             db.commit()
@@ -186,6 +204,9 @@ async def guardar_o_actualizar_licencia(
 
         else:
             # 3. NO EXISTE: Crear e insertar nuevo registro
+            hoy = date.today()
+            _, ultimo_dia = calendar.monthrange(hoy.year, hoy.month)
+
             nueva_licencia = todo(
                 rif = datos.rif,
                 razonsocial = datos.razonsocial,
@@ -194,7 +215,7 @@ async def guardar_o_actualizar_licencia(
                 fechaultima = datos.fechaultima or date.today(),
                 licencia = datos.licencia,
                 tipoempresa = datos.tipoempresa,
-                estaciones = datos.estaciones
+                estaciones = datos.estaciones or date(hoy.year, hoy.month, ultimo_dia)
             )
 
             db.add(nueva_licencia)
@@ -205,16 +226,40 @@ async def guardar_o_actualizar_licencia(
                 "mensaje": "OK",
                 "operacion": "INSERT",
                 "rif": nueva_licencia.rif,
-                "mac": nueva_licencia.mac,
                 "estatus": nueva_licencia.estatus
             }
 
     except Exception as e:
         db.rollback()  # Revierte la transacción en caso de error
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error al procesar la licencia: {str(e)}"
-        )
+        ErroresVarios(500,"Fallo de conexion a la base de datos")
+
+
+
+#FUNCION QUE EVALUA LA FECHA Y ACTUALIZA EL ESTATUS 
+def VerificarStatus(licencia: todo, db: Session) -> int:
+
+    fecha_pago = licencia.fechapago
+
+    if not fecha_pago:
+        return False
+    else:
+        # Convertir a date si viene como string
+        if isinstance(fecha_pago, str):
+            fecha_pago = datetime.strptime(fecha_pago, "%Y-%m-%d").date()
+
+        fecha_actual = date.today()
+        dias_transcurridos = (fecha_actual - fecha_pago).days
+
+        # Menos de 15 días -> 1, 15 días o más -> 2
+        nuevo_estatus = 1 if dias_transcurridos < 15 else 2
+
+    # Actualizar la base de datos solo si el estatus cambió
+    if licencia.estatus != nuevo_estatus:
+        licencia.estatus = nuevo_estatus
+        db.commit()
+        db.refresh(licencia)
+
+    return True
 
 
 

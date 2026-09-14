@@ -17,6 +17,7 @@ class todo(Base):
     licencia = Column(String)
     tipoempresa = Column(Integer)
     estaciones = Column(Integer)
+    fechapago = Column(Date)
 
 Base.metadata.create_all(engine)
 
@@ -28,7 +29,8 @@ def actualizar_esquema():
         ADD COLUMN IF NOT EXISTS estaciones INTEGER,
         ADD COLUMN IF NOT EXISTS tipoempresa INTEGER,
         ADD COLUMN IF NOT EXISTS razonsocial VARCHAR,
-        ADD COLUMN IF NOT EXISTS licencia VARCHAR;
+        ADD COLUMN IF NOT EXISTS licencia VARCHAR,
+        ADD COLUMN IF NOT EXISTS fechapago DATE;
     """)
     
     with engine.connect() as conexion:
