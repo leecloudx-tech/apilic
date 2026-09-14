@@ -106,14 +106,24 @@ async def buscar_licencia(
 @app.get('/consulta')
 async def buscar_licencia(
     rif: str,
- #   mac: str,
+    lic: str,
+    tip: int,
     db: Session = Depends(get_db)
 ):
     try:
-        licencia = db.query(todo).filter(
-            todo.rif == rif,
-#            todo.mac == mac
-        ).first()
+        if tip == 1: # BUSCA POR RIF
+            licencia = db.query(todo).filter(
+                todo.rif == rif
+            ).first()
+
+        elif tip == 2: #BUSCA POR RIF Y LICENCIA
+           licencia = db.query(todo).filter(
+                todo.rif == rif,
+                todo.licencia == lic
+           ).first()
+
+
+
 
         if not licencia:
             raise HTTPException(
@@ -129,6 +139,7 @@ async def buscar_licencia(
             "fecha Ultima": licencia.fechaultima,
             "tipo de Empresa": licencia.tipoempresa,
             "Nro Estaciones" : licencia.estaciones,
+            "mensaje" : "OK"
         }
 
     except HTTPException:
@@ -206,65 +217,4 @@ async def guardar_o_actualizar_licencia(
         )
 
 
-
-
-#Actualizo la ultima conexion y la mac
-@app.get('/combinar')
-async def combinar(
-    rif1: str,
-    mac1: str,
-    fechaultima1: str,
-    db: Session = Depends(get_db)
-):
-
-#SE VALIDA LA FECHA
-    try:
-        fecha_validada: date = datetime.strptime(fechaultima1, "%Y%m%d").date()
-    except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Formato de fecha inválido en el Header. Debe ser de 8 dígitos: AAAAMMDD (Ejemplo: 20260101)"
-        )
-
-# SE BUSCA EL REGISTRO 
-    try:
-        licencia = db.query(todo).filter(
-            todo.rif == rif1,
-        ).first()
-
-        if not licencia:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Licencia no registrada"
-            )
-
-        licencia.mac = mac1
-        licencia.fechaultima = fecha_validada
-
-        db.commit()
-        db.refresh(licencia)
-
-        return {
-            "status": licencia.estatus, 
-            "rif": licencia.rif,
-            "mac": licencia.mac,
-            "fecha Ultima": licencia.fechaultima
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        db.rollback()  # Revierte la transacción en caso de fallo
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error en el servidor: {str(e)}"
-        )
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error en el servidor: {str(e)}"
-        )
 
