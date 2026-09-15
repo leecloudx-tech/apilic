@@ -7,14 +7,14 @@ from sqlalchemy.orm import Session  # <--- Importante para Session
 from sqlalchemy import text
 from datetime import date, datetime
 from Funciones import ErroresVarios
-
+from fastapi.middleware.cors import CORSMiddleware
 
 
 
 
 class Datos(BaseModel):
-    rif: str
-    mac: str
+    rif: str | None = None
+    tipo: str
 
 class DatosLicencia(BaseModel):
     rif: str
@@ -32,8 +32,23 @@ class DatosActualizar(BaseModel):
     fechaultima: date
     mac: str
 
-app = FastAPI()
 
+
+app = FastAPI()
+# Configuración de CORS
+origins = [
+    "http://localhost:5173",  # Puerto por defecto de Vite / React
+    "http://127.0.0.1:5173",
+    "https://webapi-m1cw.onrender.com/",
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,       # O usa ["*"] para permitir cualquier origen en desarrollo
+    allow_credentials=True,
+    allow_methods=["*"],         # Permite OPTIONS, POST, GET, PUT, DELETE, etc.
+    allow_headers=["*"],         # Permite Content-Type y otros encabezados
+)
 
 
 
@@ -69,31 +84,60 @@ async def buscar_licencia(
     db: Session = Depends(get_db)
 ):
     try:
-        licencia = db.query(todo).filter(
-            todo.rif == datos.rif,
-            todo.mac == datos.mac
-        ).first()
+        if datos.tipo == '1' :
+            texto = datos.rif
+            texto = texto.upper()
+            texto = texto.replace("-", "")
 
-        if not licencia:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Licencia no registrada o inactiva"
-            )
+            licencia = db.query(todo).filter(
+                todo.rif == texto,
+            ).first()
 
-        return {
-            "status": licencia.estatus, 
-            "rif": licencia.rif, 
-            "mac": licencia.mac,
-            "fecha servidor": licencia.fechaactual,
-            "fecha Ultima": licencia.fechaultima
-            }
+            if not licencia:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Licencia no registrada o inactiva"
+                )
+
+            return {
+                "id": licencia.id if hasattr(licencia, 'id') else licencia.rif,
+                "status": licencia.estatus,
+                "rif": licencia.rif,
+                "razonsocial": licencia.razonsocial,
+                "licencia": licencia.licencia,
+                "fechaultima": str(licencia.fechaultima) if licencia.fechaultima else "",
+                "fechapago": str(licencia.fechapago) if licencia.fechapago else "",
+                "tipoempresa": licencia.tipoempresa,
+                "estaciones": licencia.estaciones
+                }
+        elif datos.tipo == '2':
+            licencias = db.query(todo).all()
+            resultado = []
+            for lic in licencias:
+
+                # 3. Construir el diccionario de cada elemento
+                resultado.append({
+                    "id": lic.id if hasattr(lic, 'id') else lic.rif,
+                    "status": lic.estatus,
+                    "rif": lic.rif,
+                    "razonsocial": lic.razonsocial,
+                    "licencia": lic.licencia,
+                    "fechaultima": str(lic.fechaultima) if lic.fechaultima else "",
+                    "fechapago": str(lic.fechapago) if lic.fechapago else "",
+                    "tipoempresa": lic.tipoempresa,
+                    "estaciones": lic.estaciones
+                })
+
+            return resultado
+        else:
+            ErroresVarios(400,"Tipo de consulta no válido. Usa '1' o '2'.")
+
+    except HTTPException as http_exc:
+        raise http_exc
 
     except Exception as e:
-        # Esto te devolverá el mensaje exacto del error en el JSON de respuesta
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error en el servidor: {str(e)}"
-        )
+        ErroresVarios(500, mensaje_custom=f"Error interno en la base de datos o servidor: {str(e)}")
+
 
 
 
@@ -184,12 +228,16 @@ async def guardar_o_actualizar_licencia(
 
         # 2. SI EXISTE: Actualizar los campos
         if licencia:
+            texto = datos.razonsocial
+            texto = texto.replace(",", "")
+            licencia.razonsocial = texto.upper() or licencia.razonsocial
             licencia.estatus = datos.estatus
             licencia.fechaultima = datos.fechaultima
             licencia.tipoempresa = datos.tipoempresa
-            licencia.mac = datos.mac
             licencia.estaciones = datos.estaciones
-            licencia.fechapago = datos.fechapago
+            hoy = datos.fechapago
+            _, ultimo_dia = calendar.monthrange(hoy.year, hoy.month) 
+            licencia.fechapago = date(hoy.year, hoy.month, ultimo_dia)
 
 
             db.commit()
