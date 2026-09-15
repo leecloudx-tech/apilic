@@ -39,7 +39,7 @@ app = FastAPI()
 origins = [
     "http://localhost:5173",  # Puerto por defecto de Vite / React
     "http://127.0.0.1:5173",
-    "https://webapi-m1cw.onrender.com/",
+    "https://webapi-m1cw.onrender.com",  # Tu URL de producción en Render
 ]
 
 app.add_middleware(
